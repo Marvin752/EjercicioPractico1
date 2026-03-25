@@ -3,10 +3,12 @@ package org.example;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Lexer {
 
-    // Palabras reservadas del lenguaje
+    // Lista de palabras reservadas del lenguaje
     private static final Set<String> PALABRAS_RESERVADAS = Set.of(
             "if", "else", "for", "print", "int"
     );
@@ -14,198 +16,197 @@ public class Lexer {
     // Cadena base para generar combinaciones tipo "asdfg"
     private static final String CADENA_BASE = "asdfg";
 
+    // ── Expresiones regulares que usa el lexer ─────────────────────────────
+    // Números enteros (uno o más dígitos)
+    private static final Pattern PATRON_NUMERO = Pattern.compile("\\d+");
+
+    // Identificadores o palabras (empiezan con letra)
+    private static final Pattern PATRON_PALABRA = Pattern.compile("[a-zA-Z][a-zA-Z0-9]*");
+
+    // Operador de asignación
+    private static final Pattern PATRON_ASIGNACION = Pattern.compile(":=");
+
+    // Operadores relacionales dobles
+    private static final Pattern PATRON_RELACIONAL_DOBLE = Pattern.compile(">=|<=|<>");
+
+    // Operador de rango
+    private static final Pattern PATRON_RANGO = Pattern.compile("\\.\\.");
+
+    // Operadores aritméticos básicos
+    private static final Pattern PATRON_ARITMETICO = Pattern.compile("[+\\-*/]");
+
+    // Operadores relacionales simples
+    private static final Pattern PATRON_RELACIONAL_SIMPLE = Pattern.compile("[><]|=(?!=)");
+
+    // Símbolos permitidos
+    private static final Pattern PATRON_SIMBOLO = Pattern.compile("[{}\\[\\](),;]");
+    // ──────────────────────────────────────────────────────────────────────
+
     private final String input;
     private int pos;
+
+    // Aquí se van guardando los errores que se encuentren
+    private final List<ErrorLexico> errores = new ArrayList<>();
 
     public Lexer(String input) {
         this.input = input;
         this.pos = 0;
     }
 
-     // Genera todas las combinaciones posibles (subcadenas) de "asdfg"
+    // Devuelve la lista de errores para que el Main los pueda mostrar
+    public List<ErrorLexico> getErrores() {
+        return errores;
+    }
 
+    // Genera todas las subcadenas posibles de "asdfg"
     private Set<String> getCombinacionesAsdfg() {
         Set<String> combinaciones = new java.util.HashSet<>();
         int n = CADENA_BASE.length();
-
-        for (int i = 0; i < n; i++) {
-            for (int j = i + 1; j <= n; j++) {
+        for (int i = 0; i < n; i++)
+            for (int j = i + 1; j <= n; j++)
                 combinaciones.add(CADENA_BASE.substring(i, j));
-            }
-        }
-
         return combinaciones;
     }
 
-    /*
-      Método principal del lexer
-      Recorre todo el texto y va generando tokens
-     */
+    // Intenta hacer match de un patrón justo en la posición actual
+    private Matcher matchEn(Pattern patron) {
+        Matcher m = patron.matcher(input);
+        m.region(pos, input.length()); // solo analiza desde donde vamos
+        m.useAnchoringBounds(true);    // respeta ese límite como si fuera inicio real
+        if (m.lookingAt()) return m;   // solo si coincide desde aquí mismo
+        return null;
+    }
+
+    // Método principal: recorre todo el texto y va generando tokens
     public List<Token> analizar() {
         List<Token> tokens = new ArrayList<>();
 
         while (pos < input.length()) {
             char c = input.charAt(pos);
 
-            // Ignorar espacios en blanco
-            if (Character.isWhitespace(c)) {
-                pos++;
+            // Ignora espacios en blanco
+            if (Character.isWhitespace(c)) { pos++; continue; }
+
+            // Primero intentamos el operador := (más específico)
+            Matcher mAsig = matchEn(PATRON_ASIGNACION);
+            if (mAsig != null) {
+                tokens.add(new Token(Token.Tipo.OPERADOR_ASIGNACION, ":="));
+                pos += 2;
                 continue;
             }
 
-            // Letras → puede ser palabra reservada o identificador
-            if (Character.isLetter(c)) {
-                tokens.add(leerPalabraOIdentificador());
-                continue;
-            }
-
-            // Números
-            if (Character.isDigit(c)) {
-                tokens.add(leerNumero());
-                continue;
-            }
-
-            // Operador de asignación :=
+            // Si hay ':' solo, es un error de asignación incompleta
             if (c == ':') {
-                tokens.add(leerAsignacion());
-                continue;
-            }
-
-            // Operadores relacionales
-            if (c == '<' || c == '>' || c == '=') {
-                tokens.add(leerOperadorRelacional());
-                continue;
-            }
-
-            // Operadores aritméticos
-            if (c == '+' || c == '-' || c == '*' || c == '/') {
-                tokens.add(new Token(Token.Tipo.OPERADOR_ARITMETICO, String.valueOf(c)));
+                tokens.add(new Token(Token.Tipo.ERROR, ":"));
+                errores.add(new ErrorLexico(TipoError.ASIGNACION_INCOMPLETA, ":"));
                 pos++;
                 continue;
             }
 
             // Operador de rango ".."
-            if (c == '.') {
-                tokens.add(leerPunto());
+            Matcher mRango = matchEn(PATRON_RANGO);
+            if (mRango != null) {
+                tokens.add(new Token(Token.Tipo.OPERADOR_RELACIONAL, ".."));
+                pos += 2;
                 continue;
             }
 
-            // Símbolos simples
-            if ("{}[](),;".indexOf(c) >= 0) {
-                tokens.add(new Token(Token.Tipo.SIMBOLO, String.valueOf(c)));
+            // Punto solo → error
+            if (c == '.') {
+                tokens.add(new Token(Token.Tipo.ERROR, "."));
+                errores.add(new ErrorLexico(TipoError.PUNTO_INVALIDO, "."));
                 pos++;
                 continue;
             }
 
-            // Si no reconoce el carácter, es error
-            tokens.add(new Token(Token.Tipo.ERROR, "Carácter no reconocido: '" + c + "'"));
+            // Operadores relacionales dobles (>=, <=, <>)
+            Matcher mRelDoble = matchEn(PATRON_RELACIONAL_DOBLE);
+            if (mRelDoble != null) {
+                tokens.add(new Token(Token.Tipo.OPERADOR_RELACIONAL, mRelDoble.group()));
+                pos += 2;
+                continue;
+            }
+
+            // Operadores relacionales simples (>, <, =)
+            Matcher mRelSimple = matchEn(PATRON_RELACIONAL_SIMPLE);
+            if (mRelSimple != null) {
+                tokens.add(new Token(Token.Tipo.OPERADOR_RELACIONAL, mRelSimple.group()));
+                pos++;
+                continue;
+            }
+
+            // Operadores aritméticos
+            Matcher mArit = matchEn(PATRON_ARITMETICO);
+            if (mArit != null) {
+                tokens.add(new Token(Token.Tipo.OPERADOR_ARITMETICO, mArit.group()));
+                pos++;
+                continue;
+            }
+
+            // Símbolos como {}, (), etc.
+            Matcher mSim = matchEn(PATRON_SIMBOLO);
+            if (mSim != null) {
+                tokens.add(new Token(Token.Tipo.SIMBOLO, mSim.group()));
+                pos++;
+                continue;
+            }
+
+            // Palabras (pueden ser reservadas, identificadores o cadenas tipo asdfg)
+            Matcher mPal = matchEn(PATRON_PALABRA);
+            if (mPal != null) {
+                tokens.add(leerPalabraOIdentificador(mPal.group()));
+                pos += mPal.group().length();
+                continue;
+            }
+
+            // Números
+            Matcher mNum = matchEn(PATRON_NUMERO);
+            if (mNum != null) {
+                tokens.add(leerNumero(mNum.group()));
+                pos += mNum.group().length();
+                continue;
+            }
+
+            // Si nada coincide, es un carácter inválido
+            String charInvalido = String.valueOf(c);
+            tokens.add(new Token(Token.Tipo.ERROR, charInvalido));
+            errores.add(new ErrorLexico(TipoError.CARACTER_INVALIDO, charInvalido));
             pos++;
         }
 
         return tokens;
     }
 
-    /*
-      Lee palabras completas:
-      - puede ser palabra reservada
-      - puede ser identificador
-      - o cadena tipo asdfg
-     */
-    private Token leerPalabraOIdentificador() {
-        StringBuilder sb = new StringBuilder();
+    // Decide si una palabra es reservada, identificador o cadena especial
+    private Token leerPalabraOIdentificador(String palabra) {
 
-        while (pos < input.length() &&
-                Character.isLetterOrDigit(input.charAt(pos))) {
-            sb.append(input.charAt(pos));
-            pos++;
-        }
-
-        String palabra = sb.toString();
-
-        // Verificar si es palabra reservada
-        if (PALABRAS_RESERVADAS.contains(palabra.toLowerCase())) {
+        // Si es palabra reservada
+        if (PALABRAS_RESERVADAS.contains(palabra.toLowerCase()))
             return new Token(Token.Tipo.PALABRA_RESERVADA, palabra.toLowerCase());
-        }
 
-        // Verificar si es combinación de "asdfg"
-        Set<String> combinaciones = getCombinacionesAsdfg();
-        if (combinaciones.contains(palabra.toLowerCase())) {
+        // Si es parte de las combinaciones de "asdfg"
+        if (getCombinacionesAsdfg().contains(palabra.toLowerCase()))
             return new Token(Token.Tipo.CADENA, palabra);
-        }
 
-        // Validar longitud del identificador
+        // Si es demasiado larga → error
         if (palabra.length() > 10) {
-            return new Token(Token.Tipo.ERROR,
-                    "Identificador demasiado largo (>10): '" + palabra + "'");
+            errores.add(new ErrorLexico(TipoError.IDENTIFICADOR_LARGO, palabra));
+            return new Token(Token.Tipo.ERROR, palabra);
         }
 
+        // Si no, es un identificador normal
         return new Token(Token.Tipo.IDENTIFICADOR, palabra);
     }
 
-
-      // Lee números enteros y valida que estén en el rango 0-100
-
-    private Token leerNumero() {
-        StringBuilder sb = new StringBuilder();
-
-        while (pos < input.length() && Character.isDigit(input.charAt(pos))) {
-            sb.append(input.charAt(pos));
-            pos++;
-        }
-
-        int valor = Integer.parseInt(sb.toString());
+    // Valida que el número esté en el rango permitido
+    private Token leerNumero(String lexema) {
+        int valor = Integer.parseInt(lexema);
 
         if (valor < 0 || valor > 100) {
-            return new Token(Token.Tipo.ERROR,
-                    "Número fuera de rango (0-100): " + valor);
+            errores.add(new ErrorLexico(TipoError.NUMERO_FUERA_RANGO, lexema));
+            return new Token(Token.Tipo.ERROR, lexema);
         }
 
-        return new Token(Token.Tipo.NUMERO_ENTERO, sb.toString());
-    }
-
-
-      // Lee el operador de asignación :=
-
-    private Token leerAsignacion() {
-        if (pos + 1 < input.length() && input.charAt(pos + 1) == '=') {
-            pos += 2;
-            return new Token(Token.Tipo.OPERADOR_ASIGNACION, ":=");
-        }
-
-        pos++;
-        return new Token(Token.Tipo.ERROR, "Carácter no reconocido: ':'");
-    }
-
-    /*
-      Lee operadores relacionales como:
-      >=, <=, <>, >, <, =
-     */
-    private Token leerOperadorRelacional() {
-        char c = input.charAt(pos);
-
-        if (pos + 1 < input.length()) {
-            char siguiente = input.charAt(pos + 1);
-            String doble = "" + c + siguiente;
-
-            if (doble.equals(">=") || doble.equals("<=") || doble.equals("<>")) {
-                pos += 2;
-                return new Token(Token.Tipo.OPERADOR_RELACIONAL, doble);
-            }
-        }
-
-        pos++;
-        return new Token(Token.Tipo.OPERADOR_RELACIONAL, String.valueOf(c));
-    }
-
-
-     // Lee el operador de rango ".."
-    private Token leerPunto() {
-        if (pos + 1 < input.length() && input.charAt(pos + 1) == '.') {
-            pos += 2;
-            return new Token(Token.Tipo.OPERADOR_RELACIONAL, "..");
-        }
-
-        pos++;
-        return new Token(Token.Tipo.ERROR, "Carácter no reconocido: '.'");
+        return new Token(Token.Tipo.NUMERO_ENTERO, lexema);
     }
 }

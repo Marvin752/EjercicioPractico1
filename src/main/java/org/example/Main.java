@@ -9,30 +9,35 @@ public class Main {
 
     public static void main(String[] args) {
 
-        // Ruta por defecto del archivo
+        // Ruta por defecto del archivo que se va a analizar
         String rutaArchivo = "codigo_fuente.txt";
 
-        // Permite pasar otra ruta como argumento
+        // Si se manda una ruta por parámetros, usamos esa en lugar de la default
         if (args.length > 0) {
             rutaArchivo = args[0];
         }
 
         String contenido;
 
-        // Intentar leer el archivo
+        // Intentamos leer todo el archivo como texto
         try {
             contenido = Files.readString(Paths.get(rutaArchivo));
         } catch (IOException e) {
+            // Si falla, mostramos mensaje y terminamos el programa
             System.err.println("No se pudo leer el archivo: " + rutaArchivo);
             return;
         }
 
-        // Se crea el lexer y se analizan los tokens
+        // Creamos el lexer y analizamos el contenido
         Lexer lexer = new Lexer(contenido);
         List<Token> tokens = lexer.analizar();
+        List<ErrorLexico> errores = lexer.getErrores();
 
-        // Se imprimen los resultados en forma de tabla
+        // Mostramos la tabla de tokens encontrados
         GeneradorTabla generador = new GeneradorTabla();
         generador.imprimirTabla(tokens, rutaArchivo);
+
+        // Mostramos la tabla de errores (si hay)
+        generador.imprimirTablaErrores(errores);
     }
 }
