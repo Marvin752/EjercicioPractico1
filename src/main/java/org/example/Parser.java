@@ -161,16 +161,14 @@ public class Parser {
 
         if (actual() != null) {
 
-            // OPERADOR ARITMETICO
             if (actual().getTipo() == Token.Tipo.OPERADOR_ARITMETICO) {
-                nodo.agregarHijo(new Nodo("OPERADOR_ARITMETICO -> " + actual().getValor()));
+                nodo.agregarHijo(new Nodo(actual().getValor()));
                 avanzar();
                 nodo.agregarHijo(parseTermino());
             }
 
-            // OPERADOR RELACIONAL
             else if (actual().getTipo() == Token.Tipo.OPERADOR_RELACIONAL) {
-                nodo.agregarHijo(new Nodo("OPERADOR_RELACIONAL -> " + actual().getValor()));
+                nodo.agregarHijo(new Nodo(actual().getValor()));
                 avanzar();
                 nodo.agregarHijo(parseTermino());
             }
@@ -180,7 +178,7 @@ public class Parser {
     }
 
     // =========================
-    // TERMINO
+    // TERMINO (AQUÍ ESTABA EL CAMBIO IMPORTANTE)
     // =========================
     private Nodo parseTermino() {
 
@@ -196,6 +194,11 @@ public class Parser {
             nodo.agregarHijo(parseNumero());
         }
 
+        else if (actual().getTipo() == Token.Tipo.CADENA) {
+            nodo.agregarHijo(new Nodo("CADENA -> " + actual().getValor()));
+            avanzar();
+        }
+
         else {
             error("Termino inválido");
             return new Nodo("ERROR");
@@ -205,7 +208,7 @@ public class Parser {
     }
 
     // =========================
-    // IDENTIFICADOR -> LETRA / DIGITOS
+    // IDENTIFICADOR
     // =========================
     private Nodo parseIdentificador() {
 
@@ -232,7 +235,7 @@ public class Parser {
     }
 
     // =========================
-    // NUMERO -> DIGITOS
+    // NUMERO
     // =========================
     private Nodo parseNumero() {
 
