@@ -1,0 +1,4 @@
+if (x > 5 {
+   pepe := 10
+   print pepe
+}

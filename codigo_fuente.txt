@@ -1,13 +1,4 @@
-if (contador := 25) {
-   for x >= 10 {
-      pepe := asdfg + sd;
-      print resultado;
-   }
+if (x > 5) {
+   pepe := 10;
+   print pepe;
 }
-int valor := 99;
-miVariableLarga := 50;
-int z := 101;
-x .. y
-a <= b;
-result <> 0;
-k := asd + fg;

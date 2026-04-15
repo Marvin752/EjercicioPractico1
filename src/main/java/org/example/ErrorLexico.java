@@ -31,3 +31,4 @@ public class ErrorLexico {
         return tipoError.getNombre();
     }
 }
+
