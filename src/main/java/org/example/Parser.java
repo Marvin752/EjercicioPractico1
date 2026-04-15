@@ -14,107 +14,112 @@ public class Parser {
         this.posicion = 0;
     }
 
-    // Devuelve el token actual
     private Token actual() {
-        if (posicion < tokens.size()) {
-            return tokens.get(posicion);
-        }
-        return null;
+        return (posicion < tokens.size()) ? tokens.get(posicion) : null;
     }
 
-    // Avanza al siguiente token
     private void avanzar() {
         posicion++;
-    }
-
-    // Registra un error sin detener la ejecución
-    private void error(String mensaje) {
-        String tokenActual = (actual() != null) ? actual().getValor() : "EOF";
-        errores.add(new ErrorSintactico(mensaje, tokenActual));
-
-        // Se avanza para evitar quedarse en el mismo token
-        avanzar();
     }
 
     public List<ErrorSintactico> getErrores() {
         return errores;
     }
 
-    // Método principal que construye el árbol
+    private void error(String msg) {
+        String t = (actual() != null) ? actual().getValor() : "EOF";
+        errores.add(new ErrorSintactico(msg, t));
+        avanzar();
+    }
+
+    // =========================
+    // PROGRAMA
+    // =========================
     public Nodo parse() {
         Nodo raiz = new Nodo("PROGRAMA");
 
+        Nodo lista = new Nodo("LISTA_SENTENCIAS");
+
         while (actual() != null) {
-            Nodo sentencia = parseSentencia();
-            if (sentencia != null) {
-                raiz.agregarHijo(sentencia);
-            }
+            lista.agregarHijo(parseSentencia());
         }
 
+        raiz.agregarHijo(lista);
         return raiz;
     }
 
-    // Analiza una sentencia
+    // =========================
+    // SENTENCIAS
+    // =========================
     private Nodo parseSentencia() {
 
-        if (actual() == null) return null;
+        if (actual() == null) return new Nodo("ERROR");
 
-        // Estructura if
-        if (actual().getValor().equalsIgnoreCase("if")) {
-            return parseIf();
-        }
+        if (actual().getValor().equalsIgnoreCase("if")) return parseIf();
 
-        // Instrucción print
-        else if (actual().getValor().equalsIgnoreCase("print")) {
-            Nodo nodo = new Nodo("PRINT");
+        if (actual().getValor().equalsIgnoreCase("print")) return parsePrint();
 
-            avanzar();
-            nodo.agregarHijo(parseExpresion());
+        if (actual().getTipo() == Token.Tipo.IDENTIFICADOR) return parseAsignacion();
 
-            if (actual() != null && actual().getValor().equals(";")) {
-                avanzar();
-            } else {
-                error("Se esperaba ';'");
-            }
-
-            return nodo;
-        }
-
-        // Asignación (identificador := expresión)
-        else if (actual().getTipo() == Token.Tipo.IDENTIFICADOR) {
-            Nodo nodo = new Nodo("ASIGNACION");
-
-            nodo.agregarHijo(new Nodo(actual().getValor()));
-            avanzar();
-
-            if (actual() != null && actual().getValor().equals(":=")) {
-                avanzar();
-                nodo.agregarHijo(parseExpresion());
-
-                if (actual() != null && actual().getValor().equals(";")) {
-                    avanzar();
-                } else {
-                    error("Se esperaba ';'");
-                }
-            } else {
-                error("Se esperaba ':='");
-            }
-
-            return nodo;
-        }
-
-        // Caso no válido
-        else {
-            error("Sentencia no válida");
-            return new Nodo("ERROR");
-        }
+        error("Sentencia no válida");
+        return new Nodo("ERROR");
     }
 
-    // Estructura if completa
-    private Nodo parseIf() {
-        Nodo nodo = new Nodo("IF");
+    // =========================
+    // ASIGNACION
+    // =========================
+    private Nodo parseAsignacion() {
 
-        avanzar(); // consume "if"
+        Nodo nodo = new Nodo("ASIGNACION");
+
+        nodo.agregarHijo(parseIdentificador());
+
+        if (actual() != null && actual().getValor().equals(":=")) {
+            nodo.agregarHijo(new Nodo(":="));
+            avanzar();
+        } else {
+            error("Se esperaba ':='");
+        }
+
+        nodo.agregarHijo(parseExpresion());
+
+        if (actual() != null && actual().getValor().equals(";")) {
+            nodo.agregarHijo(new Nodo(";"));
+            avanzar();
+        } else {
+            error("Se esperaba ';'");
+        }
+
+        return nodo;
+    }
+
+    // =========================
+    // PRINT
+    // =========================
+    private Nodo parsePrint() {
+
+        Nodo nodo = new Nodo("PRINT");
+        avanzar();
+
+        nodo.agregarHijo(parseExpresion());
+
+        if (actual() != null && actual().getValor().equals(";")) {
+            nodo.agregarHijo(new Nodo(";"));
+            avanzar();
+        } else {
+            error("Se esperaba ';'");
+        }
+
+        return nodo;
+    }
+
+    // =========================
+    // IF
+    // =========================
+    private Nodo parseIf() {
+
+        Nodo nodo = new Nodo("IF");
+        avanzar();
 
         if (actual() != null && actual().getValor().equals("(")) {
             avanzar();
@@ -122,59 +127,50 @@ public class Parser {
 
             if (actual() != null && actual().getValor().equals(")")) {
                 avanzar();
-            } else {
-                error("Se esperaba ')'");
-            }
+            } else error("Se esperaba ')'");
 
             if (actual() != null && actual().getValor().equals("{")) {
                 avanzar();
 
-                Nodo bloque = new Nodo("BLOQUE");
+                Nodo bloque = new Nodo("LISTA_SENTENCIAS");
 
-                // Se procesan múltiples sentencias dentro del bloque
                 while (actual() != null && !actual().getValor().equals("}")) {
                     bloque.agregarHijo(parseSentencia());
                 }
 
                 if (actual() != null && actual().getValor().equals("}")) {
                     avanzar();
-                } else {
-                    error("Se esperaba '}'");
-                }
+                } else error("Se esperaba '}'");
 
                 nodo.agregarHijo(bloque);
 
-            } else {
-                error("Se esperaba '{'");
-            }
-
-        } else {
-            error("Se esperaba '(' después de if");
-        }
+            } else error("Se esperaba '{'");
+        } else error("Se esperaba '('");
 
         return nodo;
     }
 
-    // Expresión simple
+    // =========================
+    // EXPRESION
+    // =========================
     private Nodo parseExpresion() {
+
         Nodo nodo = new Nodo("EXPRESION");
 
         nodo.agregarHijo(parseTermino());
 
         if (actual() != null) {
 
-            if (actual().getTipo() == Token.Tipo.OPERADOR_ARITMETICO ||
-                    actual().getTipo() == Token.Tipo.OPERADOR_RELACIONAL) {
-
-                nodo.agregarHijo(new Nodo(actual().getValor()));
+            // OPERADOR ARITMETICO
+            if (actual().getTipo() == Token.Tipo.OPERADOR_ARITMETICO) {
+                nodo.agregarHijo(new Nodo("OPERADOR_ARITMETICO -> " + actual().getValor()));
                 avanzar();
-
                 nodo.agregarHijo(parseTermino());
             }
 
-            // Permite usar := dentro de expresiones
-            else if (actual().getValor().equals(":=")) {
-                nodo.agregarHijo(new Nodo(":="));
+            // OPERADOR RELACIONAL
+            else if (actual().getTipo() == Token.Tipo.OPERADOR_RELACIONAL) {
+                nodo.agregarHijo(new Nodo("OPERADOR_RELACIONAL -> " + actual().getValor()));
                 avanzar();
                 nodo.agregarHijo(parseTermino());
             }
@@ -183,24 +179,70 @@ public class Parser {
         return nodo;
     }
 
-    // Parte básica de una expresión
+    // =========================
+    // TERMINO
+    // =========================
     private Nodo parseTermino() {
 
-        if (actual() == null) {
-            error("Expresión incompleta");
-            return new Nodo("ERROR");
-        }
+        if (actual() == null) return new Nodo("ERROR");
 
         Nodo nodo = new Nodo("TERMINO");
 
-        if (actual().getTipo() == Token.Tipo.IDENTIFICADOR ||
-                actual().getTipo() == Token.Tipo.NUMERO_ENTERO) {
+        if (actual().getTipo() == Token.Tipo.IDENTIFICADOR) {
+            nodo.agregarHijo(parseIdentificador());
+        }
 
-            nodo.agregarHijo(new Nodo(actual().getValor()));
-            avanzar();
-        } else {
-            error("Se esperaba identificador o número");
+        else if (actual().getTipo() == Token.Tipo.NUMERO_ENTERO) {
+            nodo.agregarHijo(parseNumero());
+        }
+
+        else {
+            error("Termino inválido");
             return new Nodo("ERROR");
+        }
+
+        return nodo;
+    }
+
+    // =========================
+    // IDENTIFICADOR -> LETRA / DIGITOS
+    // =========================
+    private Nodo parseIdentificador() {
+
+        Nodo nodo = new Nodo("IDENTIFICADOR");
+
+        String val = actual().getValor();
+        avanzar();
+
+        char[] chars = val.toCharArray();
+
+        nodo.agregarHijo(new Nodo("LETRA -> " + chars[0]));
+
+        if (chars.length > 1) {
+            Nodo resto = new Nodo("RESTO");
+
+            for (int i = 1; i < chars.length; i++) {
+                resto.agregarHijo(new Nodo("LETRA -> " + chars[i]));
+            }
+
+            nodo.agregarHijo(resto);
+        }
+
+        return nodo;
+    }
+
+    // =========================
+    // NUMERO -> DIGITOS
+    // =========================
+    private Nodo parseNumero() {
+
+        Nodo nodo = new Nodo("NUMERO");
+
+        char[] chars = actual().getValor().toCharArray();
+        avanzar();
+
+        for (char c : chars) {
+            nodo.agregarHijo(new Nodo("DIGITO -> " + c));
         }
 
         return nodo;
